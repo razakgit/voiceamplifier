@@ -461,9 +461,9 @@
 
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: {
-                        echoCancellation: false,
-                        noiseSuppression: false,
-                        autoGainControl: false,
+                        echoCancellation: true,  // ENABLED: Removes echo from speaker
+                        noiseSuppression: true,  // ENABLED: Removes fan/background noise
+                        autoGainControl: false,  // Keep OFF (we handle gain manually)
                         latency: 0
                     }
                 });
@@ -473,19 +473,28 @@
 
                 // Create audio nodes
                 microphone = audioContext.createMediaStreamSource(stream);
+
+                // 1. Create High-Pass Filter (Cuts fan rumble & low noise)
+                const highPassFilter = audioContext.createBiquadFilter();
+                highPassFilter.type = 'highpass';
+                highPassFilter.frequency.value = 200; // Cut everything below 200Hz (fan noise range)
+                highPassFilter.Q.value = 0.7;
+
+                // 2. Gain Node
                 gainNode = audioContext.createGain();
                 gainNode.gain.value = volume;
 
-                // Create compressor
+                // 3. Compressor (Updated for cleaner speech)
                 const compressor = audioContext.createDynamicsCompressor();
-                compressor.threshold.value = -30;
-                compressor.knee.value = 40;
-                compressor.ratio.value = 12;
+                compressor.threshold.value = -25; // Raised slightly to avoid boosting background hiss
+                compressor.knee.value = 30;
+                compressor.ratio.value = 15;
                 compressor.attack.value = 0.003;
                 compressor.release.value = 0.25;
 
-                // Connect: microphone -> gain -> compressor -> speakers
-                microphone.connect(gainNode);
+                // Connect: Mic -> HighPass -> Gain -> Compressor -> Speakers
+                microphone.connect(highPassFilter);
+                highPassFilter.connect(gainNode);
                 gainNode.connect(compressor);
                 compressor.connect(audioContext.destination);
 
