@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -175,8 +176,15 @@
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.8; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.8;
+            }
         }
 
         .status {
@@ -209,6 +217,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="header">
@@ -229,14 +238,14 @@
 
         <div class="volume-control">
             <div class="volume-header">
-                <span class="volume-label">Volume Level</span>
-                <span class="volume-value" id="volumeValue">2.0x</span>
+                <span class="volume-label">Amplification</span>
+                <span class="volume-value" id="volumeValue">3.0x</span>
             </div>
-            <input type="range" min="1" max="5" step="0.1" value="2" class="slider" id="volumeSlider">
+            <input type="range" min="1" max="10" step="0.5" value="3" class="slider" id="volumeSlider">
             <div class="presets">
-                <button class="preset-btn" onclick="setVolume(1.5)">Low</button>
-                <button class="preset-btn" onclick="setVolume(2.5)">Med</button>
-                <button class="preset-btn" onclick="setVolume(4.0)">High</button>
+                <button class="preset-btn" onclick="setVolume(2)">Low</button>
+                <button class="preset-btn" onclick="setVolume(5)">Med</button>
+                <button class="preset-btn" onclick="setVolume(8)">High</button>
             </div>
         </div>
 
@@ -256,7 +265,7 @@
                 • Speak clearly while holding the button<br>
                 • Keep phone close to your mouth when recording<br>
                 • Point speaker toward listener during playback<br>
-                • Start with low volume and increase if needed
+                • Higher amplification = louder output
             </div>
         </div>
     </div>
@@ -265,7 +274,9 @@
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
-        let volume = 2.0;
+        let volume = 3.0;
+        let audioContext;
+        let sourceNode;
 
         const recordButton = document.getElementById('recordButton');
         const buttonText = document.getElementById('buttonText');
@@ -274,6 +285,9 @@
         const statusText = document.getElementById('statusText');
         const volumeSlider = document.getElementById('volumeSlider');
         const volumeValue = document.getElementById('volumeValue');
+
+        // Initialize Audio Context
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
         // Update volume display
         volumeSlider.addEventListener('input', (e) => {
@@ -290,9 +304,9 @@
         }
 
         function updateVolumeColor() {
-            if (volume <= 1.5) {
+            if (volume <= 3) {
                 volumeValue.style.color = '#10b981';
-            } else if (volume <= 3.0) {
+            } else if (volume <= 6) {
                 volumeValue.style.color = '#f59e0b';
             } else {
                 volumeValue.style.color = '#ef4444';
@@ -302,7 +316,14 @@
         // Start recording
         async function startRecording() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+
                 mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
 
@@ -311,14 +332,14 @@
                 };
 
                 mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     await playAmplified(audioBlob);
                     stream.getTracks().forEach(track => track.stop());
                 };
 
                 mediaRecorder.start();
                 isRecording = true;
-                
+
                 recordButton.className = 'main-button recording';
                 buttonText.textContent = '🎙️ Recording... (Release to Play)';
                 buttonHint.style.display = 'block';
@@ -338,7 +359,7 @@
             }
         }
 
-        // Play amplified audio
+        // Play amplified audio using Web Audio API
         async function playAmplified(audioBlob) {
             recordButton.className = 'main-button playing';
             buttonText.textContent = '🔊 Playing Amplified...';
@@ -346,19 +367,53 @@
             statusDot.className = 'status-dot playing';
             statusText.textContent = 'Playing amplified audio...';
 
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            audio.volume = Math.min(volume / 5.0, 1.0);
+            try {
+                // Convert blob to array buffer
+                const arrayBuffer = await audioBlob.arrayBuffer();
 
-            audio.onended = () => {
+                // Decode audio data
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+                // Create source
+                sourceNode = audioContext.createBufferSource();
+                sourceNode.buffer = audioBuffer;
+
+                // Create gain node for amplification
+                const gainNode = audioContext.createGain();
+                gainNode.gain.value = volume; // Apply amplification
+
+                // Create compressor to prevent distortion
+                const compressor = audioContext.createDynamicsCompressor();
+                compressor.threshold.value = -20;
+                compressor.knee.value = 30;
+                compressor.ratio.value = 12;
+                compressor.attack.value = 0.003;
+                compressor.release.value = 0.25;
+
+                // Connect nodes: source -> gain -> compressor -> destination
+                sourceNode.connect(gainNode);
+                gainNode.connect(compressor);
+                compressor.connect(audioContext.destination);
+
+                // Play
+                sourceNode.start(0);
+
+                // Reset when done
+                sourceNode.onended = () => {
+                    recordButton.className = 'main-button ready';
+                    buttonText.textContent = '⬇️ HOLD to Record & Speak';
+                    statusDot.className = 'status-dot';
+                    statusText.textContent = 'Ready - Hold button to record';
+                };
+
+            } catch (error) {
+                console.error('Playback error:', error);
+                alert('Error playing audio: ' + error.message);
                 recordButton.className = 'main-button ready';
                 buttonText.textContent = '⬇️ HOLD to Record & Speak';
                 statusDot.className = 'status-dot';
                 statusText.textContent = 'Ready - Hold button to record';
-                URL.revokeObjectURL(audioUrl);
-            };
-
-            await audio.play();
+            }
         }
 
         // Button event listeners
@@ -381,4 +436,5 @@
         updateVolumeColor();
     </script>
 </body>
+
 </html>
