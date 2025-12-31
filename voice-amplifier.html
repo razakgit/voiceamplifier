@@ -446,13 +446,22 @@
 
         async function startLiveAmplification() {
             try {
+                // Resume AudioContext (required by browsers)
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                }
+
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         echoCancellation: false,
                         noiseSuppression: false,
-                        autoGainControl: false
+                        autoGainControl: false,
+                        latency: 0
                     }
                 });
+
+                // Store the stream for cleanup
+                window.currentStream = stream;
 
                 // Create audio nodes
                 microphone = audioContext.createMediaStreamSource(stream);
@@ -479,7 +488,7 @@
                 statusText.textContent = 'Live amplification active - Speak now!';
 
             } catch (error) {
-                alert('Microphone permission denied or not available');
+                alert('Microphone permission denied or not available. Error: ' + error.message);
                 console.error('Error:', error);
             }
         }
@@ -487,12 +496,15 @@
         function stopLiveAmplification() {
             if (microphone) {
                 microphone.disconnect();
-                microphone.mediaStream.getTracks().forEach(track => track.stop());
                 microphone = null;
             }
             if (gainNode) {
                 gainNode.disconnect();
                 gainNode = null;
+            }
+            if (window.currentStream) {
+                window.currentStream.getTracks().forEach(track => track.stop());
+                window.currentStream = null;
             }
 
             isLiveActive = false;
