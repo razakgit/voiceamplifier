@@ -359,6 +359,28 @@
             }
         }
 
+        // Normalize audio to boost quiet signals
+        function normalizeAudio(audioBuffer) {
+            const channelData = audioBuffer.getChannelData(0);
+
+            // Find the maximum absolute value
+            let max = 0;
+            for (let i = 0; i < channelData.length; i++) {
+                const abs = Math.abs(channelData[i]);
+                if (abs > max) max = abs;
+            }
+
+            // Normalize to 0.95 (95% of maximum to prevent clipping)
+            const normalizeRatio = max > 0 ? 0.95 / max : 1;
+
+            // Apply normalization
+            for (let i = 0; i < channelData.length; i++) {
+                channelData[i] *= normalizeRatio;
+            }
+
+            return audioBuffer;
+        }
+
         // Play amplified audio using Web Audio API
         async function playAmplified(audioBlob) {
             recordButton.className = 'main-button playing';
@@ -372,28 +394,45 @@
                 const arrayBuffer = await audioBlob.arrayBuffer();
 
                 // Decode audio data
-                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                let audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+                // NORMALIZE AUDIO FIRST - This boosts quiet whispers!
+                audioBuffer = normalizeAudio(audioBuffer);
 
                 // Create source
                 sourceNode = audioContext.createBufferSource();
                 sourceNode.buffer = audioBuffer;
 
-                // Create gain node for amplification
-                const gainNode = audioContext.createGain();
-                gainNode.gain.value = volume; // Apply amplification
+                // Create PRE-GAIN for initial boost
+                const preGain = audioContext.createGain();
+                preGain.gain.value = 3.0; // Always boost by 3x first
+
+                // Create MAIN GAIN node for user-controlled amplification
+                const mainGain = audioContext.createGain();
+                mainGain.gain.value = volume; // Apply user's amplification setting
 
                 // Create compressor to prevent distortion
                 const compressor = audioContext.createDynamicsCompressor();
-                compressor.threshold.value = -20;
-                compressor.knee.value = 30;
-                compressor.ratio.value = 12;
-                compressor.attack.value = 0.003;
-                compressor.release.value = 0.25;
+                compressor.threshold.value = -30; // Lower threshold to catch quieter sounds
+                compressor.knee.value = 40;
+                compressor.ratio.value = 20; // Higher ratio for more aggressive compression
+                compressor.attack.value = 0.001; // Faster attack
+                compressor.release.value = 0.1; // Faster release
 
-                // Connect nodes: source -> gain -> compressor -> destination
-                sourceNode.connect(gainNode);
-                gainNode.connect(compressor);
-                compressor.connect(audioContext.destination);
+                // Create final limiter to prevent any clipping
+                const limiter = audioContext.createDynamicsCompressor();
+                limiter.threshold.value = -3;
+                limiter.knee.value = 0;
+                limiter.ratio.value = 20;
+                limiter.attack.value = 0.001;
+                limiter.release.value = 0.01;
+
+                // Connect nodes: source -> preGain -> mainGain -> compressor -> limiter -> destination
+                sourceNode.connect(preGain);
+                preGain.connect(mainGain);
+                mainGain.connect(compressor);
+                compressor.connect(limiter);
+                limiter.connect(audioContext.destination);
 
                 // Play
                 sourceNode.start(0);
