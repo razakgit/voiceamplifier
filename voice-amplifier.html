@@ -328,9 +328,17 @@
         </div>
 
         <button class="main-button ready" id="mainButton">
-            <span id="buttonText">▶ Start Live Amplification</span>
+            <span id="buttonText">⬇️ HOLD to Record & Speak</span>
             <span id="buttonHint" class="hint" style="display: none;"></span>
         </button>
+
+        <!-- Share Button Container (Hidden by default) -->
+        <div id="shareContainer" style="display: none; margin-bottom: 20px; width: 100%;">
+            <button onclick="shareAmplifiedAudio()"
+                style="width: 100%; padding: 16px; background: #25D366; color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                📤 Share / Send to WhatsApp
+            </button>
+        </div>
 
         <div class="status">
             <div class="status-dot" id="statusDot"></div>
@@ -533,6 +541,9 @@
         async function startRecording() {
             if (currentMode !== 'record') return;
 
+            // Hide share button while recording new clip
+            document.getElementById('shareContainer').style.display = 'none';
+
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: {
@@ -551,6 +562,12 @@
 
                 mediaRecorder.onstop = async () => {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    // Store for sharing
+                    window.lastRecordedBlob = audioBlob;
+
+                    // Show share button
+                    document.getElementById('shareContainer').style.display = 'flex';
+
                     await playAmplified(audioBlob);
                     stream.getTracks().forEach(track => track.stop());
                 };
@@ -649,6 +666,148 @@
                 statusDot.className = 'status-dot';
                 statusText.textContent = 'Ready - Hold button to record';
             }
+        }
+
+        // --- SHARING FUNCTIONALITY ---
+
+        async function shareAmplifiedAudio() {
+            if (!window.lastRecordedBlob) {
+                alert("No recording found!");
+                return;
+            }
+
+            const shareBtn = document.getElementById('shareBtn');
+            const originalText = shareBtn.innerText;
+            shareBtn.innerText = "Processing...";
+            shareBtn.disabled = true;
+
+            try {
+                // 1. Decode original audio
+                const arrayBuffer = await window.lastRecordedBlob.arrayBuffer();
+                // Create a temporary AC for decoding/processing
+                const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+                let audioBuffer = await tempCtx.decodeAudioData(arrayBuffer);
+
+                // 2. Apply Normalization logic
+                audioBuffer = normalizeAudio(audioBuffer);
+
+                // 3. Render Offline (Apply Gain + Compression effects to file)
+                const offlineCtx = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
+
+                const source = offlineCtx.createBufferSource();
+                source.buffer = audioBuffer;
+
+                const preGain = offlineCtx.createGain();
+                preGain.gain.value = 3.0;
+
+                const mainGain = offlineCtx.createGain();
+                mainGain.gain.value = volume;
+
+                const compressor = offlineCtx.createDynamicsCompressor();
+                compressor.threshold.value = -30;
+                compressor.knee.value = 40;
+                compressor.ratio.value = 20;
+                compressor.attack.value = 0.001;
+                compressor.release.value = 0.1;
+
+                const limiter = offlineCtx.createDynamicsCompressor();
+                limiter.threshold.value = -3;
+                limiter.ratio.value = 20;
+
+                source.connect(preGain);
+                preGain.connect(mainGain);
+                mainGain.connect(compressor);
+                compressor.connect(limiter);
+                limiter.connect(offlineCtx.destination);
+
+                source.start(0);
+
+                const renderedBuffer = await offlineCtx.startRendering();
+
+                // 4. Encode to WAV
+                const wavBlob = audioBufferToWav(renderedBuffer);
+                const file = new File([wavBlob], "amplified_voice_msg.wav", { type: "audio/wav" });
+
+                // 5. Share
+                if (navigator.share) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'Amplified Voice Message',
+                        text: 'Here is an amplified voice message.'
+                    });
+                } else {
+                    // Fallback for browsers without share API
+                    const url = URL.createObjectURL(file);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = "amplified_voice_msg.wav";
+                    a.click();
+                    alert("Sharing not supported on this browser. File downloaded instead.");
+                }
+
+            } catch (error) {
+                console.error("Sharing error:", error);
+                alert("Could not share audio: " + error.message);
+            } finally {
+                shareBtn.innerText = originalText;
+                shareBtn.disabled = false;
+            }
+        }
+
+        // Simple WAV Encoder
+        function audioBufferToWav(buffer) {
+            const numChannels = 1;
+            const sampleRate = buffer.sampleRate;
+            const format = 1; // PCM
+            const bitDepth = 16;
+
+            const bytesPerSample = bitDepth / 8;
+            const blockAlign = numChannels * bytesPerSample;
+
+            const data = buffer.getChannelData(0);
+            const bufferLength = data.length;
+            const byteRate = sampleRate * blockAlign;
+            const dataSize = bufferLength * blockAlign;
+
+            const bufferSize = 44 + dataSize;
+            const arrayBuffer = new ArrayBuffer(bufferSize);
+            const view = new DataView(arrayBuffer);
+
+            function writeString(view, offset, string) {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            }
+
+            // RIFF chunk
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeString(view, 8, 'WAVE');
+
+            // fmt chunk
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, format, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitDepth, true);
+
+            // data chunk
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+
+            // Write PCM samples
+            let offset = 44;
+            for (let i = 0; i < bufferLength; i++) {
+                const sample = Math.max(-1, Math.min(1, data[i]));
+                const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+                view.setInt16(offset, intSample, true);
+                offset += 2;
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
         }
 
         // Initialize
