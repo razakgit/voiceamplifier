@@ -481,27 +481,58 @@
                 // Create audio nodes
                 microphone = audioContext.createMediaStreamSource(stream);
 
-                // 1. Create High-Pass Filter (Cuts fan rumble & low noise)
-                const highPassFilter = audioContext.createBiquadFilter();
-                highPassFilter.type = 'highpass';
-                highPassFilter.frequency.value = 200; // Cut everything below 200Hz (fan noise range)
-                highPassFilter.Q.value = 0.7;
+                // --- VOICE BODY ENHANCER CHAIN ---
 
-                // 2. Gain Node
+                // 1. High-Pass Filter (Remove rumble below 100Hz)
+                const highPass = audioContext.createBiquadFilter();
+                highPass.type = 'highpass';
+                highPass.frequency.value = 100;
+                highPass.Q.value = 0.7;
+
+                // 2. Bass/Body Boost (Boost 200Hz for "Chest Voice")
+                const lowBoost = audioContext.createBiquadFilter();
+                lowBoost.type = 'peaking';
+                lowBoost.frequency.value = 200;
+                lowBoost.Q.value = 0.8;
+                lowBoost.gain.value = 12.0; // Significant boost for body
+
+                // 3. Presence Boost (Boost 2.5kHz for Clarity)
+                const midBoost = audioContext.createBiquadFilter();
+                midBoost.type = 'peaking';
+                midBoost.frequency.value = 2500;
+                midBoost.Q.value = 0.8;
+                midBoost.gain.value = 4.0;
+
+                // 4. Low-Pass Filter (Cut hiss/breathiness above 4kHz)
+                const lowPass = audioContext.createBiquadFilter();
+                lowPass.type = 'lowpass';
+                lowPass.frequency.value = 4000;
+                lowPass.Q.value = 0.7;
+
+                // 5. Saturation (Adds harmonics/density to thin whispers)
+                const saturator = audioContext.createWaveShaper();
+                saturator.curve = makeDistortionCurve(400); // Amount of warmth
+                saturator.oversample = '4x';
+
+                // 6. Gain Node
                 gainNode = audioContext.createGain();
                 gainNode.gain.value = volume;
 
-                // 3. Compressor (Updated for cleaner speech)
+                // 7. Compressor (Aggressive "Broadcast" settings)
                 const compressor = audioContext.createDynamicsCompressor();
-                compressor.threshold.value = -25; // Raised slightly to avoid boosting background hiss
-                compressor.knee.value = 30;
-                compressor.ratio.value = 15;
-                compressor.attack.value = 0.003;
-                compressor.release.value = 0.25;
+                compressor.threshold.value = -35;
+                compressor.knee.value = 10;
+                compressor.ratio.value = 20;
+                compressor.attack.value = 0.002;
+                compressor.release.value = 0.15;
 
-                // Connect: Mic -> HighPass -> Gain -> Compressor -> Speakers
-                microphone.connect(highPassFilter);
-                highPassFilter.connect(gainNode);
+                // Connect Chain: Mic -> HP -> Bass -> Mid -> LP -> Saturation -> Gain -> Compressor -> Speakers
+                microphone.connect(highPass);
+                highPass.connect(lowBoost);
+                lowBoost.connect(midBoost);
+                midBoost.connect(lowPass);
+                lowPass.connect(saturator);
+                saturator.connect(gainNode);
                 gainNode.connect(compressor);
                 compressor.connect(audioContext.destination);
 
