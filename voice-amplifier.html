@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Voice Amplifier</title>
+    <title>Voice Amplifier - Live Mode</title>
     <style>
         * {
             margin: 0;
@@ -44,6 +44,34 @@
             font-size: 14px;
         }
 
+        .mode-switch {
+            background: #1e293b;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #334155;
+            border-radius: 12px;
+            background: #1e293b;
+            color: #94a3b8;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .mode-btn.active {
+            background: #6366f1;
+            border-color: #6366f1;
+            color: white;
+        }
+
         .card {
             background: #1e293b;
             border-radius: 16px;
@@ -62,6 +90,7 @@
         .card-text {
             line-height: 1.6;
             color: #f1f5f9;
+            font-size: 14px;
         }
 
         .volume-control {
@@ -166,6 +195,11 @@
             background: #6366f1;
         }
 
+        .main-button.active {
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
         .main-button.recording {
             background: #ef4444;
             animation: pulse 1.5s infinite;
@@ -183,7 +217,7 @@
             }
 
             50% {
-                opacity: 0.8;
+                opacity: 0.85;
             }
         }
 
@@ -202,6 +236,11 @@
             background: #94a3b8;
         }
 
+        .status-dot.active {
+            background: #10b981;
+            animation: blink 1s infinite;
+        }
+
         .status-dot.recording {
             background: #ef4444;
         }
@@ -210,10 +249,27 @@
             background: #10b981;
         }
 
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
         .hint {
             font-size: 14px;
             color: #fecaca;
             margin-top: 8px;
+        }
+
+        .warning {
+            background: #7c2d12;
+            border-left-color: #f59e0b;
         }
     </style>
 </head>
@@ -222,63 +278,89 @@
     <div class="container">
         <div class="header">
             <h1>🎤 Voice Amplifier</h1>
-            <p class="subtitle">Record & play back your amplified voice</p>
+            <p class="subtitle">Real-time voice amplification</p>
         </div>
 
-        <div class="card">
-            <div class="card-title">📱 How to Use</div>
+        <div class="mode-switch">
+            <button class="mode-btn active" id="liveModeBtn" onclick="switchMode('live')">
+                ⚡ Live Mode
+            </button>
+            <button class="mode-btn" id="recordModeBtn" onclick="switchMode('record')">
+                🎙️ Record Mode
+            </button>
+        </div>
+
+        <!-- Live Mode Instructions -->
+        <div class="card" id="liveInstructions">
+            <div class="card-title">⚡ Live Mode - Real-time Amplification</div>
             <div class="card-text">
-                1. Adjust volume level below<br>
-                2. Press and HOLD the big button to record<br>
+                1. Adjust amplification level below<br>
+                2. Tap "Start Live Amplification"<br>
+                3. Speak normally - hear yourself amplified instantly!<br>
+                4. Tap "Stop" when done<br>
+                <br>
+                <strong>⚠️ Warning:</strong> Keep microphone away from speaker to avoid feedback!
+            </div>
+        </div>
+
+        <!-- Record Mode Instructions -->
+        <div class="card" id="recordInstructions" style="display: none;">
+            <div class="card-title">🎙️ Record Mode - Playback</div>
+            <div class="card-text">
+                1. Adjust amplification level below<br>
+                2. Press and HOLD the button to record<br>
                 3. Speak your message while holding<br>
-                4. RELEASE the button to play amplified<br>
-                5. Your amplified voice plays through speaker!
+                4. RELEASE to play back amplified<br>
             </div>
         </div>
 
         <div class="volume-control">
             <div class="volume-header">
                 <span class="volume-label">Amplification</span>
-                <span class="volume-value" id="volumeValue">3.0x</span>
+                <span class="volume-value" id="volumeValue">5.0x</span>
             </div>
-            <input type="range" min="1" max="10" step="0.5" value="3" class="slider" id="volumeSlider">
+            <input type="range" min="1" max="15" step="0.5" value="5" class="slider" id="volumeSlider">
             <div class="presets">
-                <button class="preset-btn" onclick="setVolume(2)">Low</button>
-                <button class="preset-btn" onclick="setVolume(5)">Med</button>
-                <button class="preset-btn" onclick="setVolume(8)">High</button>
+                <button class="preset-btn" onclick="setVolume(3)">Low</button>
+                <button class="preset-btn" onclick="setVolume(7)">Med</button>
+                <button class="preset-btn" onclick="setVolume(12)">High</button>
             </div>
         </div>
 
-        <button class="main-button ready" id="recordButton">
-            <span id="buttonText">⬇️ HOLD to Record & Speak</span>
-            <span id="buttonHint" class="hint" style="display: none;">Release to play back amplified</span>
+        <button class="main-button ready" id="mainButton">
+            <span id="buttonText">▶ Start Live Amplification</span>
+            <span id="buttonHint" class="hint" style="display: none;"></span>
         </button>
 
         <div class="status">
             <div class="status-dot" id="statusDot"></div>
-            <span id="statusText">Ready - Hold button to record</span>
+            <span id="statusText">Ready to amplify</span>
         </div>
 
-        <div class="card" style="border-left-color: #10b981;">
-            <div class="card-title" style="color: #10b981;">💡 Tips</div>
+        <div class="card warning">
+            <div class="card-title" style="color: #f59e0b;">⚠️ Important - Prevent Feedback</div>
             <div class="card-text">
-                • Speak clearly while holding the button<br>
-                • Keep phone close to your mouth when recording<br>
-                • Point speaker toward listener during playback<br>
-                • Higher amplification = louder output
+                • Use headphones/earbuds for best results<br>
+                • OR keep phone away from speaker<br>
+                • Start with LOW amplification<br>
+                • Increase gradually to avoid screeching
             </div>
         </div>
     </div>
 
     <script>
+        let currentMode = 'live';
+        let isLiveActive = false;
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
-        let volume = 3.0;
+        let volume = 5.0;
         let audioContext;
         let sourceNode;
+        let microphone;
+        let gainNode;
 
-        const recordButton = document.getElementById('recordButton');
+        const mainButton = document.getElementById('mainButton');
         const buttonText = document.getElementById('buttonText');
         const buttonHint = document.getElementById('buttonHint');
         const statusDot = document.getElementById('statusDot');
@@ -294,6 +376,11 @@
             volume = parseFloat(e.target.value);
             volumeValue.textContent = volume.toFixed(1) + 'x';
             updateVolumeColor();
+
+            // Update gain in real-time if live mode is active
+            if (isLiveActive && gainNode) {
+                gainNode.gain.value = volume;
+            }
         });
 
         function setVolume(val) {
@@ -301,20 +388,139 @@
             volumeSlider.value = val;
             volumeValue.textContent = val.toFixed(1) + 'x';
             updateVolumeColor();
+
+            if (isLiveActive && gainNode) {
+                gainNode.gain.value = volume;
+            }
         }
 
         function updateVolumeColor() {
-            if (volume <= 3) {
+            if (volume <= 5) {
                 volumeValue.style.color = '#10b981';
-            } else if (volume <= 6) {
+            } else if (volume <= 10) {
                 volumeValue.style.color = '#f59e0b';
             } else {
                 volumeValue.style.color = '#ef4444';
             }
         }
 
-        // Start recording
+        function switchMode(mode) {
+            currentMode = mode;
+
+            // Stop any active amplification
+            if (isLiveActive) {
+                stopLiveAmplification();
+            }
+
+            // Update UI
+            if (mode === 'live') {
+                document.getElementById('liveModeBtn').classList.add('active');
+                document.getElementById('recordModeBtn').classList.remove('active');
+                document.getElementById('liveInstructions').style.display = 'block';
+                document.getElementById('recordInstructions').style.display = 'none';
+                buttonText.textContent = '▶ Start Live Amplification';
+                mainButton.onclick = toggleLiveAmplification;
+                mainButton.onmousedown = null;
+                mainButton.onmouseup = null;
+                mainButton.ontouchstart = null;
+                mainButton.ontouchend = null;
+            } else {
+                document.getElementById('liveModeBtn').classList.remove('active');
+                document.getElementById('recordModeBtn').classList.add('active');
+                document.getElementById('liveInstructions').style.display = 'none';
+                document.getElementById('recordInstructions').style.display = 'block';
+                buttonText.textContent = '⬇️ HOLD to Record & Speak';
+                mainButton.onclick = null;
+                setupRecordMode();
+            }
+        }
+
+        // LIVE MODE FUNCTIONS
+        async function toggleLiveAmplification() {
+            if (isLiveActive) {
+                stopLiveAmplification();
+            } else {
+                await startLiveAmplification();
+            }
+        }
+
+        async function startLiveAmplification() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+
+                // Create audio nodes
+                microphone = audioContext.createMediaStreamSource(stream);
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = volume;
+
+                // Create compressor
+                const compressor = audioContext.createDynamicsCompressor();
+                compressor.threshold.value = -30;
+                compressor.knee.value = 40;
+                compressor.ratio.value = 12;
+                compressor.attack.value = 0.003;
+                compressor.release.value = 0.25;
+
+                // Connect: microphone -> gain -> compressor -> speakers
+                microphone.connect(gainNode);
+                gainNode.connect(compressor);
+                compressor.connect(audioContext.destination);
+
+                isLiveActive = true;
+                mainButton.className = 'main-button active';
+                buttonText.textContent = '⏸ Stop Live Amplification';
+                statusDot.className = 'status-dot active';
+                statusText.textContent = 'Live amplification active - Speak now!';
+
+            } catch (error) {
+                alert('Microphone permission denied or not available');
+                console.error('Error:', error);
+            }
+        }
+
+        function stopLiveAmplification() {
+            if (microphone) {
+                microphone.disconnect();
+                microphone.mediaStream.getTracks().forEach(track => track.stop());
+                microphone = null;
+            }
+            if (gainNode) {
+                gainNode.disconnect();
+                gainNode = null;
+            }
+
+            isLiveActive = false;
+            mainButton.className = 'main-button ready';
+            buttonText.textContent = '▶ Start Live Amplification';
+            statusDot.className = 'status-dot';
+            statusText.textContent = 'Ready to amplify';
+        }
+
+        // RECORD MODE FUNCTIONS
+        function setupRecordMode() {
+            mainButton.addEventListener('mousedown', startRecording);
+            mainButton.addEventListener('mouseup', stopRecording);
+            mainButton.addEventListener('mouseleave', stopRecording);
+            mainButton.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                startRecording();
+            });
+            mainButton.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                stopRecording();
+            });
+            mainButton.addEventListener('touchcancel', stopRecording);
+        }
+
         async function startRecording() {
+            if (currentMode !== 'record') return;
+
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: {
@@ -340,9 +546,10 @@
                 mediaRecorder.start();
                 isRecording = true;
 
-                recordButton.className = 'main-button recording';
+                mainButton.className = 'main-button recording';
                 buttonText.textContent = '🎙️ Recording... (Release to Play)';
                 buttonHint.style.display = 'block';
+                buttonHint.textContent = 'Release to play back amplified';
                 statusDot.className = 'status-dot recording';
                 statusText.textContent = 'Recording your voice...';
             } catch (error) {
@@ -351,7 +558,6 @@
             }
         }
 
-        // Stop recording
         function stopRecording() {
             if (mediaRecorder && isRecording) {
                 mediaRecorder.stop();
@@ -359,67 +565,48 @@
             }
         }
 
-        // Normalize audio to boost quiet signals
         function normalizeAudio(audioBuffer) {
             const channelData = audioBuffer.getChannelData(0);
-
-            // Find the maximum absolute value
             let max = 0;
             for (let i = 0; i < channelData.length; i++) {
                 const abs = Math.abs(channelData[i]);
                 if (abs > max) max = abs;
             }
-
-            // Normalize to 0.95 (95% of maximum to prevent clipping)
             const normalizeRatio = max > 0 ? 0.95 / max : 1;
-
-            // Apply normalization
             for (let i = 0; i < channelData.length; i++) {
                 channelData[i] *= normalizeRatio;
             }
-
             return audioBuffer;
         }
 
-        // Play amplified audio using Web Audio API
         async function playAmplified(audioBlob) {
-            recordButton.className = 'main-button playing';
+            mainButton.className = 'main-button playing';
             buttonText.textContent = '🔊 Playing Amplified...';
             buttonHint.style.display = 'none';
             statusDot.className = 'status-dot playing';
             statusText.textContent = 'Playing amplified audio...';
 
             try {
-                // Convert blob to array buffer
                 const arrayBuffer = await audioBlob.arrayBuffer();
-
-                // Decode audio data
                 let audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-                // NORMALIZE AUDIO FIRST - This boosts quiet whispers!
                 audioBuffer = normalizeAudio(audioBuffer);
 
-                // Create source
                 sourceNode = audioContext.createBufferSource();
                 sourceNode.buffer = audioBuffer;
 
-                // Create PRE-GAIN for initial boost
                 const preGain = audioContext.createGain();
-                preGain.gain.value = 3.0; // Always boost by 3x first
+                preGain.gain.value = 3.0;
 
-                // Create MAIN GAIN node for user-controlled amplification
                 const mainGain = audioContext.createGain();
-                mainGain.gain.value = volume; // Apply user's amplification setting
+                mainGain.gain.value = volume;
 
-                // Create compressor to prevent distortion
                 const compressor = audioContext.createDynamicsCompressor();
-                compressor.threshold.value = -30; // Lower threshold to catch quieter sounds
+                compressor.threshold.value = -30;
                 compressor.knee.value = 40;
-                compressor.ratio.value = 20; // Higher ratio for more aggressive compression
-                compressor.attack.value = 0.001; // Faster attack
-                compressor.release.value = 0.1; // Faster release
+                compressor.ratio.value = 20;
+                compressor.attack.value = 0.001;
+                compressor.release.value = 0.1;
 
-                // Create final limiter to prevent any clipping
                 const limiter = audioContext.createDynamicsCompressor();
                 limiter.threshold.value = -3;
                 limiter.knee.value = 0;
@@ -427,19 +614,16 @@
                 limiter.attack.value = 0.001;
                 limiter.release.value = 0.01;
 
-                // Connect nodes: source -> preGain -> mainGain -> compressor -> limiter -> destination
                 sourceNode.connect(preGain);
                 preGain.connect(mainGain);
                 mainGain.connect(compressor);
                 compressor.connect(limiter);
                 limiter.connect(audioContext.destination);
 
-                // Play
                 sourceNode.start(0);
 
-                // Reset when done
                 sourceNode.onended = () => {
-                    recordButton.className = 'main-button ready';
+                    mainButton.className = 'main-button ready';
                     buttonText.textContent = '⬇️ HOLD to Record & Speak';
                     statusDot.className = 'status-dot';
                     statusText.textContent = 'Ready - Hold button to record';
@@ -448,30 +632,14 @@
             } catch (error) {
                 console.error('Playback error:', error);
                 alert('Error playing audio: ' + error.message);
-                recordButton.className = 'main-button ready';
+                mainButton.className = 'main-button ready';
                 buttonText.textContent = '⬇️ HOLD to Record & Speak';
                 statusDot.className = 'status-dot';
                 statusText.textContent = 'Ready - Hold button to record';
             }
         }
 
-        // Button event listeners
-        recordButton.addEventListener('mousedown', startRecording);
-        recordButton.addEventListener('mouseup', stopRecording);
-        recordButton.addEventListener('mouseleave', stopRecording);
-
-        // Touch events for mobile
-        recordButton.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            startRecording();
-        });
-        recordButton.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            stopRecording();
-        });
-        recordButton.addEventListener('touchcancel', stopRecording);
-
-        // Initialize volume color
+        // Initialize
         updateVolumeColor();
     </script>
 </body>
